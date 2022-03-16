@@ -11,29 +11,9 @@ steps:
         config: .buildkite/docker-compose.yml
         run: agent
 
-  - name: ":hammer: :linux: arm64"
-    key: test-linux-arm64
-    command: ".buildkite/steps/tests.sh"
-    artifact_paths: junit-*.xml
-    agents:
-      queue: elastic-runners-arm64
-    plugins:
-      docker-compose#v3.0.0:
-        config: .buildkite/docker-compose.yml
-        run: agent
-
-  - name: ":hammer: :windows:"
-    key: test-windows
-    command: "bash .buildkite\\steps\\tests.sh"
-    artifact_paths: junit-*.xml
-    agents:
-      queue: buildkite-agent-windows
-
   - label: ":junit:"
     depends_on:
       - test-linux-amd64
-      - test-linux-arm64
-      - test-windows
     plugins:
       - junit-annotate#v1.6.0:
           artifacts: junit-*.xml
@@ -44,7 +24,6 @@ steps:
     depends_on:
       # don't wait for slower windows tests
       - test-linux-amd64
-      - test-linux-arm64
     artifact_paths: "pkg/*"
     plugins:
       docker-compose#v3.0.0:
@@ -53,108 +32,7 @@ steps:
     matrix:
       setup:
         os:
-          - darwin
-          - freebsd
           - linux
-          - openbsd
-          - windows
         arch:
-          - "386"
           - amd64
-          - arm64
-      adjustments:
-        - with: { os: darwin, arch: "386" }
-          skip: "macOS no longer supports x86 binaries"
 
-        - with: { os: dragonflybsd, arch: amd64 }
-
-        - with: { os: freebsd, arch: arm64 }
-          skip: "arm64 FreeBSD is not currently supported"
-
-        - with: { os: linux, arch: arm }
-        - with: { os: linux, arch: armhf }
-        - with: { os: linux, arch: ppc64 }
-        - with: { os: linux, arch: ppc64le }
-        - with: { os: linux, arch: mips64le }
-        - with: { os: linux, arch: s390x }
-
-        - with: { os: netbsd, arch: amd64 }
-
-        - with: { os: openbsd, arch: arm64 }
-          skip: "arm64 OpenBSD is not currently supported"
-
-        - with: { os: windows, arch: arm64 }
-          skip: "arm64 Windows is not currently supported"
-
-  - name: ":hammer: bk cli & agent cli"
-    key: test-bk-cli
-    depends_on: build-binary
-    command: ".buildkite/steps/test-bk.sh"
-    plugins:
-      docker-compose#v3.0.0:
-        config: .buildkite/docker-compose.yml
-        run: agent
-        env:
-          - BUILDKITE_AGENT_ACCESS_TOKEN
-          - BUILDKITE_BUILD_ID
-          - BUILDKITE_JOB_ID
-        volumes:
-          - "/usr/bin/buildkite-agent:/usr/bin/buildkite-agent"
-
-  - name: ":mag:"
-    key: set-metadata
-    command: ".buildkite/steps/extract-agent-version-metadata.sh"
-
-  - group: ":docker: builds"
-    steps:
-      - name: ":docker: {{matrix}} build"
-        key: build-docker
-        depends_on:
-          - build-binary
-          - set-metadata
-        command: ".buildkite/steps/build-docker-image.sh {{matrix}}"
-        matrix:
-          setup:
-            - "alpine"
-            - "ubuntu-18.04"
-            - "ubuntu-20.04"
-            - "sidecar"
-
-  - name: ":debian: build"
-    key: build-debian-packages
-    depends_on:
-      - build-binary
-      - set-metadata
-    command: ".buildkite/steps/build-debian-packages.sh"
-    artifact_paths: "deb/**/*"
-
-  - name: ":redhat: build"
-    key: build-rpm-packages
-    depends_on:
-      - build-binary
-      - set-metadata
-    command: ".buildkite/steps/build-rpm-packages.sh"
-    artifact_paths: "rpm/**/*"
-
-  - name: ":github: :hammer:"
-    key: build-github-release
-    depends_on:
-      - build-binary
-      - set-metadata
-    command: ".buildkite/steps/build-github-release.sh"
-    artifact_paths: "releases/**/*"
-    plugins:
-      docker-compose#v1.8.0:
-        config: .buildkite/docker-compose.release.yml
-        run: github-release
-
-  - name: ":pipeline:"
-    key: upload-release-steps
-    depends_on:
-      - test-windows
-      - test-bk-cli
-      - build-rpm-packages
-      - build-debian-packages
-      - build-docker
-      - build-github-release
-    command: ".buildkite/steps/upload-release-steps.sh"
